@@ -1,0 +1,260 @@
+#include <SoftwareSerial.h>
+SoftwareSerial miBT(3, 10);           // Fa que els pins 3 i 10, els del bluetooth siguin rx i tx
+
+const int AMCR = A2;                  //IR sensor dreta
+const int AMCL = A0;                  //IR sensor esquerra
+const int TRIGFAE = A4;               //Trigger US Fre
+const int ECHOFAE = A3;               //Echo US Fre
+const int TRIGDAMR = 13;              //Trigger US Angle mort dreta
+const int ECHODAMR = 12;              //Echo US Angle mort dreta
+const int TRIGDAML = A5;              //Trigger US Angle mort esquerra
+const int ECHODAML = A1;              //Echo US Angle mort esquerra
+const int LEDR = 11;                  //LED Dreta DAM
+const int LEDL = 9;                   //LED Esquerra DAM
+const int IN1 = 2;                    //Pin del controlador de motors
+const int IN2 = 4;                    //Pin del controlador de motors
+const int IN3 = 7;                    //Pin del controlador de motors
+const int IN4 = 8;                    //Pin del controlador de motors
+const int ENA = 5;                    //Pin del controlador de motors que serveix per a regular la velocitat
+const int ENB = 6;                    //Pin del controlador de motors que serveix per a regular la velocitat
+
+const float VelSon = 34000.0;         //Velocitat del so per a calcular distancia
+
+float distanciaFAE;                   //Distancia per a fre automàtic
+float distanciaDAMR;                  //Distància per a Angle Mort dreta
+float distanciaDAML;                  //Distància per a Angle Mort esquerra
+int IRDreta;                          //Per determinar si l'IR dreta és 0 o 1
+int IREsquerra;                       //Per determinar si l'IR esquerra és 0 o 1
+char DATOBT = 0;                      //Per a fer que aquest valor sigui el rebut pel bluetooth
+int AMC = 0;                          //Variable per a que el assistent de manteniment de carril no sigui un conductor automàtic.
+long interval1 = 2;                   //Interval de 2 milisegons per als sensors d'ultrasons
+long interval2 = 10;                  //Interval de 10 milisegons per als sensors d'ultrasons
+unsigned long previousMillis1 = 0;    //Variable per a poder fer el delay dels sensors d'ultrasons
+unsigned long previousMillis2 = 0;    //Variable per a poder fer el delay dels sensors d'ultrasons
+unsigned long previousMillis3 = 0;    //Variable per a poder fer el delay dels sensors d'ultrasons
+int x = 0;                            //Variable per a poder fer el delay dels sensors d'ultrasons
+int y = 0;                            //Variable per a poder fer el delay dels sensors d'ultrasons
+int z = 0;                            //Variable per a poder fer el delay dels sensors d'ultrasons
+int gir = 0;                         //Variable per a fer saber a l'assistent de manteniment de carril si estem girant o no
+int w = 0;                            //Variable per a fer funcionar l'assistent de manteniment de carril
+
+void setup() {
+  Serial.begin(9600);
+  miBT.begin(38400);                  //Serveix per a fer que el bluetooth comenci a funcionar
+  pinMode(AMCR, INPUT);
+  pinMode(AMCL, INPUT);
+  pinMode(TRIGFAE, OUTPUT);
+  pinMode(ECHOFAE, INPUT);
+  pinMode(TRIGDAMR, OUTPUT);
+  pinMode(ECHODAMR, INPUT);
+  pinMode(TRIGDAML, OUTPUT);
+  pinMode(ECHODAML, INPUT);
+  pinMode(LEDL, OUTPUT);
+  pinMode(LEDR, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  //Això serveix per a determinar si els pins serveixen com a INPUT(rebre dades o ordres) o OUTPUT (enviar dades o ordres)
+  digitalWrite(IN4, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN1, LOW);
+}
+
+
+// Mètode que inicia el Trigger per a començar a mesurar distància del fre autònom d'emergència
+void iniciarTriggerFAE() {
+  unsigned long currentMillis1 = millis();
+  if (x == 0){
+    if (currentMillis1 - previousMillis1 >= interval1) {
+      previousMillis1 = currentMillis1;
+      digitalWrite (TRIGFAE, HIGH);
+      x = 1;
+          }
+            }
+  if (x == 1){
+    if (currentMillis1 - previousMillis1 >= interval2) {
+      previousMillis1 = currentMillis1;
+      digitalWrite (TRIGFAE, LOW);
+      x = 0;
+                                                    }
+            }
+}
+// Mètode que inicia el Trigger per a començar a mesurar distància del detector d'angle mort
+void iniciarTriggerDAMR() {
+  unsigned long currentMillis2 = millis();
+  if (y == 0){
+    if (currentMillis2 - previousMillis2 >= interval1){
+      previousMillis2 = currentMillis2;
+      digitalWrite (TRIGDAMR, HIGH);
+      y = 1;
+    }
+  }
+
+  if (y == 1){
+    if (currentMillis2 - previousMillis2 >= interval2) {
+      previousMillis2 = currentMillis2;
+      digitalWrite (TRIGDAMR, LOW);
+      y = 0;
+    }
+  }
+}
+
+// Mètode que inicia el Trigger per a començar a mesurar distància del detector d'angle mort
+void iniciarTriggerDAML() {
+  unsigned long currentMillis3 = millis();
+  if (z == 0){
+    if (currentMillis3 - previousMillis3 >= interval1){
+      previousMillis3 = currentMillis3;
+      digitalWrite (TRIGDAML, HIGH);
+      z = 1;
+    }
+  }
+
+  if (z == 1){
+    if (currentMillis3 - previousMillis3 >= interval2){
+      previousMillis3 = currentMillis3;
+      digitalWrite (TRIGDAML, LOW);
+      z = 0;
+    }
+  }
+}
+
+void loop() {
+  //Programa per a realitzar la conducció utilitzant el bluetooth
+  if (miBT.available()) {
+    DATOBT = miBT.read();             //Llegeix la dada enviada
+    if (DATOBT == '1') {              //Si envies 1 amb el mòbil fer que fagi cap a endavant.
+      //Roda dreta
+      digitalWrite(IN4, LOW);
+      digitalWrite(IN3, HIGH);
+      analogWrite(ENB, 170);          //Fer que la roda dreta giri a 170 velocitat
+      //Roda esquerra
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN1, LOW);
+      analogWrite(ENA, 170);          //Fer que la roda esquerra giri a 170 velocitat
+      AMC = 0;                        //Fer que les vegades que s'ha fet l'assistent de manteniment de carril sense canviar de direcció siguin 0
+      w = 0;
+      gir = 0;
+    }
+
+    else if (DATOBT == 'R') {         //Si envies r amb el mòbil fer que fagi cap a endavant a la dreta
+      //Roda dreta
+      digitalWrite(IN4, LOW);
+      digitalWrite(IN3, HIGH);
+      analogWrite(ENB, 150);          //Fer que la roda dreta giri a 150 velocitat
+      //Roda esquerra
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN1, LOW);
+      analogWrite(ENA, 190);          //Fer que la roda esquerra giri a 190 velocitat
+      AMC = 0;                        //Fer que les vegades que s'ha fet l'assistent de manteniment de carril sense canviar de direcció siguin 0
+      w = 0;
+      gir = 1;
+    } else if (DATOBT == 'L') {
+      //Programa per a que vagi davant a la esquerra
+      //Roda dreta
+      digitalWrite(IN4, LOW);
+      digitalWrite(IN3, HIGH);
+      analogWrite(ENB, 190);          //Fer que la roda dreta giri a 190 velocitat
+      //Roda esquerra
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN1, LOW);
+      analogWrite(ENA, 150);          //Fer que la roda esquerra giri a 150 velocitat
+      AMC = 0;                        //Fer que les vegades que s'ha fet l'assistent de manteniment de carril sense canviar de direcció siguin 0
+      w = 0;
+      gir = 1;
+    } else if (DATOBT == 'P') {       //Quan rebi P que pari
+      //Roda dreta
+      digitalWrite(IN4, LOW);
+      digitalWrite(IN3, LOW);
+      //Roda esquerra
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN1, LOW);
+      AMC = 0;                        //Fer que les vegades que s'ha fet l'assistent de manteniment de carril sense canviar de direcció siguin 0
+      gir = 0;
+    }
+  }
+   
+  //Assistent de manteniment de carril
+    IRDreta = digitalRead(AMCR);
+    IREsquerra = digitalRead(AMCL);
+    if(AMC < 3 && gir == 0){
+      if (IRDreta == HIGH && IREsquerra == LOW && w == 0) {
+        //Roda dreta
+        digitalWrite(IN4, LOW);
+        digitalWrite(IN3, HIGH);
+        analogWrite(ENB, 190);          //Fer que la roda dreta giri a 190 velocitat
+        //Roda esquerra
+        digitalWrite(IN2, HIGH);
+        digitalWrite(IN1, LOW);
+        analogWrite(ENA, 150);          //Fer que la roda esquerra giri a 150 velocitat
+        w = 1;
+      }
+      if (IRDreta == LOW && IREsquerra == HIGH && w == 0) {
+        //Roda dreta
+        digitalWrite(IN4, LOW);
+        digitalWrite(IN3, HIGH);
+        analogWrite(ENB, 150);          //Fer que la roda dreta giri a 150 velocitat
+        //Roda esquerra
+        digitalWrite(IN2, HIGH);
+        digitalWrite(IN1, LOW);
+        analogWrite(ENA, 190);          //Fer que la roda esquerra giri a 190 velocitat
+        w = 1;
+      }
+      if (IRDreta == LOW && IREsquerra == LOW && w == 1){
+        //Roda dreta
+      digitalWrite(IN4, LOW);
+      digitalWrite(IN3, HIGH);
+      analogWrite(ENB, 170);          //Fer que la roda dreta giri a 170 velocitat
+      //Roda esquerra
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN1, LOW);
+      analogWrite(ENA, 170 );          //Fer que la roda esquerra giri a 170 velocitat
+        w = 0;
+    }
+  //Començar a mesurar distància de tots els ultrasons
+  iniciarTriggerFAE();
+  unsigned long tiempo1 = pulseIn(ECHOFAE, HIGH, 75000);
+  Serial.println(distanciaFAE);
+
+  distanciaFAE = tiempo1 * 0.000001 * VelSon / 2.0;
+ 
+
+  iniciarTriggerDAMR();
+  unsigned long tiempo2 = pulseIn(ECHODAMR, HIGH, 75000);
+
+  distanciaDAMR = tiempo2 * 0.000001 * VelSon / 2.0;
+
+  iniciarTriggerDAML();
+  unsigned long tiempo3 = pulseIn(ECHODAML, HIGH, 75000);
+
+  distanciaDAML = tiempo3 * 0.000001 * VelSon / 2.0;
+
+  //Fre autònom d'emergència
+
+ 
+  if (distanciaFAE < 30 && distanciaFAE > 0) {
+    digitalWrite(IN4, LOW);
+    digitalWrite(IN3, LOW);
+    //Roda esquerra
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN1, LOW);
+  }
+ 
+
+  //Detector àngle mort dreta
+  if (distanciaDAMR < 15 && distanciaDAMR > 0)
+    digitalWrite(LEDR, HIGH);
+
+  else if (distanciaDAMR > 0)
+    digitalWrite(LEDR, LOW);
+  //Detector àngle mort esquerra
+  if (distanciaDAML < 15 && distanciaDAML > 0)
+    digitalWrite(LEDL, HIGH);
+
+  else if (distanciaDAML > 0)
+    digitalWrite(LEDL, LOW);
+}
+}
+
+
+
