@@ -1,4 +1,3 @@
-```cpp
 #include <SoftwareSerial.h>
 SoftwareSerial miBT(3, 10);           // Fa que els pins 3 i 10, els del bluetooth siguin rx i tx
 
@@ -256,5 +255,3 @@ void loop() {
     digitalWrite(LEDL, LOW);
 }
 }
-
-```
